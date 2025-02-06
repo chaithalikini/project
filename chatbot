@@ -1,0 +1,541 @@
+import os
+import ssl
+import random
+import streamlit as st
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+
+# Ensure SSL context is set for NLTK (if used)
+ssl._create_default_https_context = ssl._create_unverified_context
+
+intents = [
+    {
+        "tag": "greeting",
+        "patterns": ["Hi", "Hello", "Good morning", "Good evening", "Hey"],
+        "responses": [
+            "Hello! How can I assist you today?",
+            "Hi there! What can I help you with?",
+            "Good day! How can I help you?"
+        ]
+    },
+    {
+        "tag": "farewell",
+        "patterns": ["Bye", "Goodbye", "See you later", "Thank you"],
+        "responses": [
+            "Goodbye! Have a great day!",
+            "See you later! Feel free to ask if you have more questions.",
+            "Thank you! Take care!"
+        ]
+    },
+    {
+        "tag": "admissions",
+        "patterns": ["How do I apply?", "What is the admission process?", "Tell me about the eligibility criteria", "How can I get admission?"],
+        "responses": [
+            "You can apply through the official website. Please check the admission section for detailed information.",
+            "The admission process involves filling out an application form and meeting the eligibility criteria based on your course."
+        ]
+    },
+    {
+        "tag": "courses",
+        "patterns": ["What courses are offered?", "Tell me about the programs available", "What are the undergraduate courses?", "What postgraduate courses do you have?"],
+        "responses": [
+            "We offer various undergraduate programs like B.E. in Computer Science, Mechanical, Civil, etc., and postgraduate programs like M.Tech and MBA.",
+            "You can find a complete list of courses on our official website under the 'Academics' section."
+        ]
+    },
+    {
+        "tag": "placements",
+        "patterns": ["What are the placement opportunities?", "Tell me about the placement record", "Which companies visit for placements?"],
+        "responses": [
+            "We have a dedicated placement cell that helps students secure internships and jobs. Many reputed companies visit for placements. You can find placement statistics on our website."
+        ]
+    },
+    {
+        "tag": "fees",
+        "patterns": ["What is the fee structure?", "How much is the tuition fee?", "Are there any scholarships available?", "fees"],
+        "responses": [
+            "The fee structure varies for different courses. Please check the 'Admissions' section on our website for detailed information."
+        ]
+    },
+    {
+        "tag": "facilities",
+        "patterns": ["What facilities are available on campus?", "Tell me about the hostel facilities"],
+        "responses": ["We provide modern infrastructure, including labs, libraries, and sports facilities. Hostel facilities are also available for students."]
+    },
+    {
+        "tag": "extracurricular activities",
+        "patterns": ["What are the extracurricular activities?"],
+        "responses": ["There are various clubs and activities for students to engage in extracurricular activities."]
+    },  
+    {
+        "tag": "general",
+        "patterns": ["Who are you?", "What can you do?", "Tell me about MITE"],
+        "responses": [
+            "I am a chatbot here to assist you with inquiries related to Mangalore Institute of Technology and Engineering.",
+            "MITE is a premier engineering institute offering various undergraduate and postgraduate programs."
+        ]
+    },
+    {
+        "tag": "HoD",
+        "patterns": ["Can you provide details about the Heads of Departments?", "Who are the HoDs at MITE?", "Tell me about the Ho D of Computer Science"],
+        "responses": [
+            "The Heads of Departments are experienced faculty members who oversee the academic and administrative functions of their respective departments. You can find their details on our official website."
+        ]
+    },
+    {
+        "tag": "location",
+        "patterns": ["Where is MITE located?", "Tell me the address of MITE", "What is the location of M ITE?"],
+        "responses": [
+            "MITE is located at Badaga Mijar, Moodbidri, Karnataka, India. It is situated amidst lush greenery, providing a serene environment for education.",
+            "The institute is easily accessible and is located at Badaga Mijar, about 35 km from Mangalore city."
+        ]
+    },
+    {
+        "tag": "motto",
+        "patterns": ["What is the motto of MITE?", "Tell me about the vision of MITE", "What does MITE stand for?"],
+        "responses": [
+            "MITE's motto is 'Strive for Excellence'. It embodies the institute's dedication to fostering innovation, academic rigor, and professional development.",
+            "The vision of MITE is to create a world-class educational environment and to contribute to the nation's progress through research and innovation."
+        ]
+    },
+    {
+      "tag": "facilities",
+      "patterns": [
+        "What facilities are available on campus?",
+        "Tell me about the campus amenities.",
+        "Does MITE have a library?",
+        "Are there sports facilities at MITE?",
+        "What labs and infrastructure does MITE offer?"
+      ],
+      "responses": [
+        "MITE offers state-of-the-art facilities including advanced labs, a well-stocked library, sports grounds, hostels, and a cafeteria.",
+        "The campus has a modern auditorium, seminar halls, and fully-equipped engineering labs.",
+        "Our library includes a large collection of books, journals, and digital resources."
+      ]
+    },
+    {
+      "tag": "hostel",
+      "patterns": [
+        "Does MITE provide hostel facilities?",
+        "What are the hostel charges?",
+        "Is there separate accommodation for boys and girls?",
+        "Tell me about the hostel life at MITE.",
+        "What are the facilities provided in the hostels?"
+      ],
+      "responses": [
+        "Yes, MITE provides separate hostels for boys and girls with facilities like Wi-Fi, mess, and recreational areas.",
+        "Hostels are well-maintained, with 24/7 security and access to clean water and electricity.",
+        "For detailed fee structures, please refer to the official website or contact the administration."
+      ]
+    },
+    {
+      "tag": "placements",
+      "patterns": [
+        "What are the placement opportunities at MITE?",
+        "Which companies visit MITE for placements?",
+        "How is the placement record at MITE?",
+        "Tell me about the highest package offered at MITE.",
+        "Does MITE have a training and placement cell?"
+      ],
+      "responses": [
+        "MITE has an excellent placement cell, regularly hosting top recruiters like Infosys, Wipro, TCS, and more.",
+        "The highest package offered at MITE last year was ₹50 LPA, with an average package of ₹4.5 LPA.",
+        "Our placement training includes soft skills, aptitude, and technical sessions to prepare students for the industry."
+      ]
+    },
+    {
+      "tag": "events",
+      "patterns": [
+        "What events are conducted at MITE?",
+        "Tell me about the cultural fests at MITE.",
+        "Does MITE have an annual fest?",
+        "What kind of extracurricular activities are there?",
+        "Do you have technical events on campus?"
+      ],
+      "responses": [
+        "MITE organizes annual cultural fests like 'Sentia' and technical fests such as 'TechAura' to encourage student participation.",
+        "Students can take part in sports, debates, cultural shows, and technical hackathons.",
+        "We also host inter-college events and encourage students to participate in external competitions."
+      ]
+    },
+    {
+      "tag": "admission_deadlines",
+      "patterns": [
+        "When do admissions start at MITE?",
+        "What is the last date to apply for MITE?",
+        "Is there an early admission option?",
+        "Can I still apply for the current academic year?",
+        "What are the deadlines for UG and PG admissions?"
+      ],
+      "responses": [
+        "Admissions typically open in April and close by July. Check the official website for specific dates.",
+        "For the latest deadlines and notifications, please contact the admissions office or refer to our admissions section online.",
+        "We encourage early applicants as seat availability is limited in popular courses."
+      ]
+    },
+    {
+      "tag": "scholarships",
+      "patterns": [
+        "Does MITE offer scholarships?",
+        "What are the scholarship criteria at MITE?",
+        "Are there any government scholarships for MITE students?",
+        "Tell me about the financial aid options at MITE.",
+        "What is the process to apply for scholarships?"
+      ],
+      "responses": [
+        "Yes, MITE offers scholarships based on academic performance, merit, and sports achievements.",
+        "Government and private scholarships are also available for eligible students.",
+        "For detailed information and application processes, please contact the scholarship office or visit the official website."
+      ]
+    },
+    {
+      "tag": "transport",
+      "patterns": [
+        "Does MITE provide transportation facilities?",
+        "What are the bus routes for MITE?",
+        "Is there a bus service from the city to MITE?",
+        "How much does the transportation fee cost?",
+        "Tell me about the transport options for MITE students."
+      ],
+      "responses": [
+        "MITE provides an extensive bus service connecting the campus to nearby cities like Mangalore and Udupi.",
+        "Transport fees vary based on distance. Please contact the administration for details.",
+        "We ensure comfortable and timely transport for all students and staff."
+      ]
+    },
+    {
+      "tag": "alumni",
+      "patterns": [
+        "Tell me about the alumni network at MITE.",
+        "Are there alumni events conducted by MITE?",
+        "How can I connect with MITE alumni?",
+        "Does MITE have a strong alumni association?",
+        "What are MITE alumni doing now?"
+      ],
+      "responses": [
+        "MITE has a strong alumni network, with members excelling in various industries globally.",
+        "We often organize alumni meets and networking events to strengthen the bond with our graduates.",
+        "Our alumni contribute to the college through mentorship and career guidance programs."
+      ]
+    },
+    {
+      "tag": "research",
+      "patterns": [
+        "Does MITE encourage research?",
+        "What are the research facilities at MITE?",
+        "Tell me about the innovation programs at MITE.",
+        "Can students participate in research projects?",
+        "Is there funding for student research at MITE?"
+      ],
+      "responses": [
+        "MITE emphasizes research and innovation through dedicated labs and funding for student projects.",
+        "Students can collaborate with faculty on cutting-edge research in engineering, science, and technology.",
+        "Our innovation center encourages entrepreneurship and hosts workshops on emerging technologies."
+      ]
+    },
+    {
+    "tag": "campus_tour",
+    "patterns": ["Can I visit the campus?", "Do you allow campus tours?", "Tell me about campus visits", "Is there a way to visit MITE?"],
+    "responses": [
+        "Yes, you can visit the campus! We offer campus tours for prospective students and their families. You can schedule a visit by contacting the admissions office at least a week in advance. Please reach us at +91-824-2264913 or email info@mite.ac.in to book your tour.",
+        "Campus visits are welcome! To arrange a tour, please contact our admissions office at +91-824-2264913 or email us at info@mite.ac.in. Tours are available on weekdays, and we recommend booking ahead.",
+        "Yes, you can visit the campus. We provide guided tours for prospective students. To schedule a visit, please contact the admissions office via phone (+91-824-2264913) or email (info@mite.ac.in). Tours are generally available from Monday to Friday, 9:00 AM to 4:00 PM."
+    ]
+},
+{
+    "tag": "course_prerequisites",
+    "patterns": ["Do I need prerequisites for Computer Science?", "Are there any prerequisites for Computer Science?", "What are the requirements for the Computer Science course?"],
+    "responses": [
+        "For the Computer Science program, you typically need a strong foundation in mathematics and basic knowledge of computer programming. If you're applying for the undergraduate course (B.E. in Computer Science), having subjects like Physics, Mathematics, and Computer Science in your 12th-grade curriculum is beneficial.",
+        "For the B.E. in Computer Science, the main prerequisite is a good understanding of mathematics and science subjects in high school. Some programming experience is also helpful but not mandatory. For postgraduate courses like M.Tech, a relevant bachelor's degree in Computer Science or related fields is required.",
+        "To apply for the Computer Science undergraduate program, you should have studied Mathematics, Physics, and Computer Science in your senior secondary education. For the M.Tech program, a B.E./B.Tech degree in Computer Science or a related field is required."
+    ]
+},
+{
+    "tag": "important_dates",
+    "patterns": ["What are the important dates?", "Tell me about the deadlines for this year", "What are the admission deadlines?", "When are the exams scheduled?"],
+    "responses": [
+        "Here are some important dates for the current academic year at MITE:\n\n- *Admission Application Deadline:* June 30, 2024\n- *Orientation for New Students:* July 15, 2024\n- *Semester Commencement:* August 1, 2024\n- *Mid-Semester Exams:* October 10-15, 2024\n- *End-Semester Exams:* December 1-15, 2024\n\nPlease visit the academic calendar on our website for the most accurate and updated information.",
+        "The key dates for the academic year are as follows:\n\n- *Admission Deadline:* June 30, 2024\n- *Start of Classes:* August 1, 2024\n- *Exam Periods:* Mid-semester exams in October and final exams in December.\n\nCheck the official website for a detailed academic calendar.",
+        "Important dates to note:\n\n- *Admission Applications Close:* June 30, 2024\n- *Classes Begin:* August 1, 2024\n- *Exam Dates:* Mid-October (midterms) and December (finals).\n\nFor a complete schedule, refer to the academic calendar on [www.mite.ac.in](http://www.mite.ac.in)."
+    ]
+},
+{
+        "tag": "contact_info",
+        "patterns": ["What is the contact information?", "How can I contact MITE?", "Give me the contact details", "How do I reach MITE?", "What is the phone number of MITE?", "Email address of MITE?"],
+        "responses": [
+            "You can contact Mangalore Institute of Technology and Engineering (MITE) at:\n\n"
+            "📞 Phone: +91 9741731309/ 8296829169/ +91 8258 262695/ 96/ 97 \n"
+            "📧 Email: info@mite.ac.in\n"
+            "🏢 Address: Mangalore Institute of Technology and Engineering, Moodabidri, Mangalore, Karnataka, India"
+        ]
+    },
+    {
+        "tag": "about_mite",
+        "patterns": ["Tell me about MITE", "What is MITE?", "Give me information about MITE", "Tell me more about Mangalore Institute of Technology and Engineering", "What is Mangalore Institute of Technology & Engineering?"],
+        "responses": [
+            "Nestled in the lush, serene landscapes of Moodabidri, near Mangalore, the Mangalore Institute of Technology & Engineering (MITE) stands as a beacon of academic excellence and innovation. Founded in 2007 by the visionary Mr. Rajesh Chouta under the aegis of the Rajalaxmi Education Trust, MITE has rapidly evolved into a premier Engineering & Management institute.\n\n"
+            "As an Autonomous institution, MITE prides itself on crafting an educational experience that blends rigorous academic scholarship with practical expertise. Recognized with an illustrious NAAC A+ Grade and positioned within the 151-300 band of NIRF’s Innovation ranking, MITE is dedicated to molding well-rounded professionals, equipped with a harmonious blend of attitude, skills, cultural awareness, and knowledge – ready to thrive in the global arena."
+        ]
+    },
+    {
+        "tag": "principal",
+        "patterns": ["Who is the principal of MITE?", "Tell me about the principal", "Who is Prof. Prashanth C M?", "Who is the head of MITE?"],
+        "responses": ["Prof. Prashanth C M is the Principal of Mangalore Institute of Technology and Engineering (MITE)."]
+    },
+    {
+        "tag": "director_placements",
+        "patterns": ["Who is the director of placements?", "Tell me about Mr. Narendra U P", "Who is the Director of Placements, Training & Industry Relations?"],
+        "responses": ["Mr. Narendra U P is the Director of Placements, Training & Industry Relations at MITE."]
+    },
+    {
+        "tag": "vice_principal",
+        "patterns": ["Who is the Vice Principal?", "Tell me about Dr. C R Rajashekar", "Who is Dr. C R Rajashekar?"],
+        "responses": ["Dr. C R Rajashekar is the Vice Principal and Head of the Department (HoD) of Mechanical Engineering at MITE."]
+    },
+    {
+        "tag": "hod_mechanical",
+        "patterns": ["Who is the HoD of Mechanical Engineering?", "Tell me about Dr. C R Rajashekar", "Who is Dr. C R Rajashekar, HoD of Mechanical Engg?"],
+        "responses": ["Dr. C R Rajashekar is the Head of the Department (HoD) of Mechanical Engineering at MITE."]
+    },
+    {
+        "tag": "hod_aeronautical",
+        "patterns": ["Who is the HoD of Aeronautical Engineering?", "Tell me about Dr. Anand S N", "Who is Dr. Anand S N, HoD of Aeronautical Engg?"],
+        "responses": ["Dr. Anand S N is the Head of the Department (HoD) of Aeronautical Engineering at MITE."]
+    },
+    {
+        "tag": "hod_computer_science",
+        "patterns": ["Who is the HoD of Computer Science and Engineering?", "Tell me about Dr. Ravinarayana B", "Who is Dr. Ravinarayana B, HoD of Computer Science?"],
+        "responses": ["Dr. Ravinarayana B is the Head of the Department (HoD) of Computer Science and Engineering at MITE."]
+    },
+    {
+        "tag": "hod_information_science",
+        "patterns": ["Who is the HoD of Information Science and Engineering?", "Tell me about Prof. Manjunath H", "Who is Prof. Manjunath H, HoD of Information Sc & Engg?"],
+        "responses": ["Prof. Manjunath H is the Head of the Department (HoD) of Information Science and Engineering at MITE."]
+    },
+    {
+        "tag": "hod_electronics_comms",
+        "patterns": ["Who is the HoD of Electronics and Communication Engineering?", "Tell me about Dr. Vinayambika S Bhat", "Who is Dr. Vinayambika S Bhat, HoD of Electronics and Commn Engg?"],
+        "responses": ["Dr. Vinayambika S Bhat is the Head of the Department (HoD) of Electronics and Communication Engineering at MITE."]
+    },
+    {
+        "tag": "hod_cse_iot_cybersecurity",
+        "patterns": ["Who is the HoD of CSE IoT & Cyber security with Blockchain Technology?", "Tell me about Dr. Shivananda V Seeri", "Who is Dr. Shivananda V Seeri, HoD of CSE IoT & Cybersecurity?"],
+        "responses": ["Dr. Shivananda V Seeri is the Head of the Department (HoD) of CSE with specialization in IoT & Cyber Security with Blockchain Technology at MITE."]
+    },
+    {
+        "tag": "hod_ai_ml",
+        "patterns": ["Who is the HoD of CSE AI & ML?", "Tell me about Mr. Sunil Kumar", "Who is Mr. Sunil Kumar, HoD of AI & ML?"],
+        "responses": ["Mr. Sunil Kumar is the Head of the Department (HoD) of Artificial Intelligence and Machine Learning at MITE."]
+    },
+    {
+        "tag": "hod_mechatronics",
+        "patterns": ["Who is the HoD of Mechatronics Engineering?", "Tell me about Dr. Mohan Kumar", "Who is Dr. Mohan Kumar, HoD of Mechatronics Engg?"],
+        "responses": ["Dr. Mohan Kumar is the Head of the Department (HoD) of Mechatronics Engineering at MITE."]
+    },
+    {
+        "tag": "hod_civil",
+        "patterns": ["Who is the HoD of Civil Engineering?", "Tell me about Dr. Ganesh Mogaveer", "Who is Dr. Ganesh Mogaveer, HoD of Civil Engg?"],
+        "responses": ["Dr. Ganesh Mogaveer is the Head of the Department (HoD) of Civil Engineering at MITE."]
+    },
+    {
+        "tag": "hod_chemistry",
+        "patterns": ["Who is the HoD of Chemistry?", "Tell me about Dr. Vineetha Telma D’Souza", "Who is Dr. Vineetha Telma D’Souza, HoD of Chemistry?"],
+        "responses": ["Dr. Vineetha Telma D’Souza is the Head of the Department (HoD) of Chemistry at MITE."]
+    },
+    {
+        "tag": "hod_physics",
+        "patterns": ["Who is the HoD of Physics?", "Tell me about Dr. Raghavendra Sagar", "Who is Dr. Raghavendra Sagar, HoD of Physics?"],
+        "responses": ["Dr. Raghavendra Sagar is the Head of the Department (HoD) of Physics at MITE."]
+    },
+    {
+        "tag": "hod_mathematics",
+        "patterns": ["Who is the HoD of Mathematics?", "Tell me about Dr. Jyothi S", "Who is Dr. Jyothi S, HoD of Mathematics?"],
+        "responses": ["Dr. Jyothi S is the Head of the Department (HoD) of Mathematics at MITE."]
+    },
+    {
+        "tag": "chairman",
+        "patterns": ["Who is the chairman of MITE?", "Tell me about the chairman of MITE", "Who is the head of MITE?", "Who is the chairman of Mangalore Institute of Technology and Engineering?"],
+        "responses": ["The chairman of Mangalore Institute of Technology and Engineering (MITE) is Mr. Rajesh Chouta, a visionary who founded the institute under the aegis of the Rajalaxmi Education Trust."]
+    },
+]
+def preprocess_data(intents):
+    patterns = []
+    tags = []
+    for intent in intents:
+        for pattern in intent['patterns']:
+            patterns.append(pattern)
+            tags.append(intent['tag'])
+    return patterns, tags
+
+patterns, tags = preprocess_data(intents)
+
+# Vectorize data
+vectorizer = TfidfVectorizer(stop_words='english')
+X = vectorizer.fit_transform(patterns)
+y = tags
+
+# Train model
+model = LogisticRegression()
+model.fit(X, y)
+
+# Chatbot response function
+def get_response(user_input):
+    try:
+        user_input_vectorized = vectorizer.transform([user_input])
+        predicted_tag = model.predict(user_input_vectorized)[0]
+
+        for intent in intents:
+            if intent['tag'] == predicted_tag:
+                return random.choice(intent['responses'])
+
+        return "I'm sorry, I didn't understand that. Can you please rephrase your question?"
+    except Exception as e:
+        print(f"Error during response generation: {e}")
+        return "An error occurred while processing your request."
+
+# Set background image and add logo
+def set_background_and_logo():
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background-color: #f9f9f9;
+        }
+        .logo-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo-container img {
+            max-width: 100px;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        .logo-container h1 {
+            display: inline;
+            font-size: 30px; /* Increased size of college name */
+            color: #0073e6;
+            font-family: Arial, sans-serif;
+            white-space: nowrap; /* Ensures the text stays on a single line */
+        }
+        body {
+            background-image: url("https://your-background-image-url.com");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        </style>
+        <div class="logo-container">
+            <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxIHERMRBxATEBAQEg0TDxASGA8XFhoPFhEWFhUSGBsYHSggGBolGxUVITEhJSkrLi8uFx8zODMsNygtLisBCgoKDg0OGhAQGysgIB4tLS0tKysrLS0rKy0tLS0rLysrKy0tLS0rKy0tKy0tNzctKy0tLS0tLSstKystNysrK//AABEIAMgA+gMBEQACEQEDEQH/xAAcAAEBAAIDAQEAAAAAAAAAAAAABgQFAQMHAgj/xAA8EAACAQMCAwQGBwcFAQAAAAAAAQIDBBEFMQYSIRNBUWEHIjJxgcEUMzRCcnOCIyRDUqGx4RVTYtHwkf/EABoBAQEAAwEBAAAAAAAAAAAAAAAFAQMEAgb/xAAtEQEAAgIBAgUDBAMBAQEAAAAAAQIDEQQFIRIiMTNRcYGRE0FCYTI0odFSI//aAAwDAQACEQMRAD8A9xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYWo6nS02KlfTVOLaipS2y30RmtZtOoYmYj1d1xcwt4OpWkowinKU3so4zkxqZnUEzERthLXrd9m+0WK/wBS+vre7xPf6du/9MeKHXPiW1hLlnWSllpLr1a3S8TMYrT+zHjq+lxDbPl5aibqZ5F1y8b49x5/Tt8M+OGXZX9O+5vo0s8rxJdej8DE1mPUiYllmHoAAAAAAAAAAAAAAAAAAAAAAAAAAAAA0fFtlDUrfsbjHLVlGL26Nvo/gzbhtNbbhryV8VdJSvdS1Kyr2Nw2pWVOvG6b3cIJ9j78pRbN8RFLxeP39GuZ8VZr8MuSTho/Re0sbf7Z5/fIz/8ALL4opRhfaaoxil2lz3Lfljk84pn9O7N/86udepOGoWStFCL5bp9UsbdX0GP2rbL/AOdW90fnipK+7PtuZ83Z49jPqN/A021+zZH9tmeXoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAxryyhepK4WVFqS33XeZiZj0YmNuqtpdGsqiqU4/t0lWffJJYw/gItMa7+hMRLT6x9C0qNP6TFN0PqKabzF/wDHqac3Mri3Np9f+t+Dh3zTEVj7/tD6sbuz4hlCrJLtqXWCl0lF97X/AMPPH5lckTFZ+z1yOFkwz5o+7a3Ol0rupGrXhmpBNQn1zFPfB0xaaxqHLMRM7dtpY07RydCOHNpzfXLa2MTMyzERDKMMgAAAAAAAAAAAAAAAAAAAAAAAAAAAAGLe31Owi53UlGK8TXkyVxxu0vePHfJbw1jaK1rjSVXMNKXLHqu0lv8AAlZ+o2t2x/la4/S4jzZZ+ySqTdRuVVuUnu3vkmzMzO5V6xFY1EacQlyvMHiS2azlMRMxLMxExqVTovGc7XENSXaQx7a9pe/xKHH6havbJ3j5SeT0utt2xdp+FzYahT1CPNaTU15f2K+PLTJG6yh5MV8VvDeNMs2PAAAAAAAAAAAAAAAAAAAAAAAAAAAHxUmqabm0kt28YMTMR3k1M9oSmucZQtsw01dpPrmf3U/mTuR1CtfLTvKpxumXyebJ2hD3t7Uv5c95NzfnsvciRkyXyTu0ruLDTFGqRp3aXpVXVJJWsHjvm88qXiesWC+SdVhr5HKx4Y3aft+680ThKlp+JXGKtTxeyfkizg4NMfe3eUHk9QyZe0dofetcLUdSTdNdlU7pR8fNd5nPwqZO8dpeePz8uLtM7j4Qmr6LW0mWLiOY91SOeXBHzcfJinzR917j8vFmjtPf4Ydpdzs5c1pNwl4o1Uvak7rOm/JipkjV42tdD40jUxDVFyS27Reznz8Crx+oRPlyflD5PS7V82Lv/Suo1Y1Vmm1JPZrDRUiYtG4SZiYnUu0yAAAAAAAAAAAAAAAAAAAAAADIGh1riijpeY57Sp/JHx833HJn5mPH29Z+HZx+Dlzd9aj5Qer67W1Z/vEuWHdTjnH+SLm5N8v+U/Ze4/CxYY7RuflgWttO7koWsHOXgjVSlrzqsOjJkpjr4rzpZ6JwSlierPL/ANuO3xfeVOP06PXJ+EXkdUtPlxflY0KMaCUaMVGK2SwVIrFY1EJE2m07mXaemADrq01VTVRJp7p4PMxExqSJmJ3CQ1vgqNTM9LfJLq+zfst/Im8jp0T3x/hW43VLV8uXvHz+6LvLOpYy5LyDhLz2+DJWTHbHOrwt4s1MsbpO2VpWs1tJf7rL1e+EvZ/wbMPIyYp8s/Zq5HExZv8AKO/yu9F4ro6jiNZ9lUa9mW2fJljBzseXtPaULkdPyYe8d4+VCnnY7XA5AAAAAAAAAAAAAAAAAAADB1TU6elQ57t4Wyxu34I1Zs1MVfFZtw4b5beGkIHWeLa2oZjbfsafXb2mvf3EbPzsmTtXtC9x+m48Xe/mn/ifSc3hZcn722zi1uVGZisKbReDal7id++yh/L95r5Hfg4F7979o/6l8jqdKbrj7z8/suNO0ylp0eW0go+L7372V8eGmONVhDy5smWd3nbNSwbWtyAAAAAGJf2FO/jy3cFNeZryYqZI1aHvHkvjndJ0iNa4MnbZnprdSPX1H7SXl4knP0+1e+Pv/S3x+qVtquXt/aVnBweKiaku55TTJ0xMTqVaJi0bhvNF4qrab6tZ9tT8H7SXkzrwc3Ji7T3hwcjp2LL3r5Z/4vtH1elq8Oa1e2OaL3T8GWsOemWu6oGfj5MNvDeGyNzSAAAAAAAAAAAAAAAAAEh6R/qKf5nyJvUvbj6q3SPdt9ETp1r9NqwpReHNpZ+ZIx0/UvFflazZP08c3+Hpei8O0dK60481TvnLq/h4F/BxMeL09fl8zyOblzes9vhujqcoAAAAAAAAAAanV9Bo6sv3iOJd049Gc2bi480eaPu6OPy8uGfLP2eZ6tY/6bWnSb5uXv8AJ7EHNj/TyTR9Px836uOL6VXo4X136PmUel/ySusetFwVkUAAAAAAAAAAAAAAAAAJH0j/AFFP8z5E3qXtx9VXpPu2+iR4a+10PxomcX3qq3N9i71xH0r5QAAAAAAAAAAAADyrjD7ZV/T/AGR87zfes+p6f/r1b70cfxvfT+Z19M/kn9Y9aLcrowAAAAAAAAAAAAAAAAASPpH+op/mfIm9S9uPqq9J9230SPDX2uh+NEzi+9VW5vsXeuI+lfKAAAAAAAAADQ8Y8RLhm3daUO0k3GNOms+tN9xtw4pyX015L+Cu2PwXxfS4ppt012dan0q0nuvNeKM58FsU92MWWLwpjS2vKuMPtlX9P9kfO833rPqen/69W+9HH8b30/mdfTP5J/WPWi3K6MAAAAAAAAAAAAAAAAAEj6R/qKf5nyJvUvbj6qvSfdt9Ejw19rofjRM4vvVVub7F3riPpXygAAAAAAAAA809JdxTvrqhbXVd29OjCdepVis4ntCPxO3ixNaTaI3+zmzTE2iNoatcPh6tQvrOrDtZSfa20MpqC3cvxI64j9Ws0mPu55nwTFol7vpGoQ1WjTr2zzCpFSX/AF8CTes0tNZd9Zi0bh5vxf8AbKv6f7I+b5vvWfV9P/16t76OP436PmdfTP5J/WPWi4K6MAAAAAAAAAAAAAAAAAEj6R/qKf5nyJvUvbj6qvSfdt9Ejw19rofjRM4vvVVub7F3riPpXygAAAAAAAAA/PnpIupVNSuMNpLkjhZ2SWCzxaxGKE3PPnlLybm25vMnu3uzphqezehfVPpNrO3m+tvL1fwS6r+uSVzaav4vl3ca266YfEtvO8v6kLaLnJ8uEvcup8lyqWvyJisPruHkrj41bWlX8JaFLR4SdzLM6nLmK2WM9PPcp8LjThrPi9ZSOfy4z2jwx2hRHa4QAAAAAAAAAAAAAAAAAkfSP9RT/M+RN6l7cfVV6T7tvokeGvtdD8aJnF96qtzfYu9cR9K+UAAAAAAAAOm6rq2hKdV4jCLk35JZERudMTOo2/OPFmsx1+6qXFGm6anypRe+EsKTx44LuHHOOkVmUzJfx2205teFZ6ONdjoNxWncvEJ0J/GcesV73k5eXinJWNNuC8UtO3sfCdaOoW8LjsnTnWjmXMvW37yPfFXHedflRrktekRP4b0MgAAAAAAAAAAAAAAAAAAkfSP9RT/M+RN6l7cfVV6T7tvokeGvtdD8aJnF96qtzfYu9cR9K+UAAAAAAAAIn0r6x/pljKFJpVK7VNL/AI/eZ08TH48n0aeRbw0eEpY6Ispw+m4FnwlwLX1B0bq+hi15lJwftyin06eBx5+VWsTWvq6MeGZ1aVfxJq1e2uZwtKsoU4qKjBYwlhdD4zl58tc1oiz7Hg8bDfBW1qt1wHfVb7tXeVHPl5OXPxydXTst7+LxTtxdUw48U18EaWBTSgAAAAAAAAAAAAAAAAAkfSP9RT/M+RN6l7cfVW6R7tvojtBrRoXNKdZ8sVJZb7l4kvjzFctZlX5dZtgtEPWqNaNdKVFqUXs0fSRaLRuHycxNZ1LtPTAAAAAAGp17W4aNTcppznj1KUfab7ke6Um86ebWisPEOKLm51e5dTiVSto4l2UGn0hjoo+OemWVsUUpTWPu4Lza1t27MPhThmvxLVjC3hKNLp2tZp8sY96Xiz3mz1xV3Pq848U3l6ToXoro2NftdQquvCEk6VLGF5OXicGTm2tXURp1U40RO5ehycaMfWxGK9ySRwzOu8umI32h5XxPXjcXVSVBqUXjDW23U+c5VovmtMS+q4NLUwVraFD6OP436PmdvTP5J3WPWi4K6MAAAAAAAAAAAAAAAAAGh4s0eesUlG2klKMuZZ2fTY4+Zx7ZqRFZdnB5NcGTxWjs83vLOpZScLuDg/PbHiQsmO2OdWh9LizUy18VJ2yNK1mtpL/dJ+r3wl1j/g94uRkxT5Z+zVn4uPNHmj7rvReLKOo4jV/ZVH92Wzfkyxg52PJ2ntKDyOn5MO59Y/pRJ52O5wuQAAABizsoVJqpOOZR29/iZiZ1pjUbLywpXuPpdONTG3MkxW019JJiJ9XbRoxt1y0YqMV3RSS/oYmZn1IjTS61xRR0v1U+0qdfUj4+b7jjz83Hi7esu7j8DJm7+kfMoTV9dr6s8XEuWHdTjt8fEjZuTfL/AJT2+F7j8PFh9I7/ACwbS1ndyULWDnJ7JGqmO151WG/JlpjjxXnT0ThHQ6mkRk7lpyqcuYruwn0/qXOHxrYYnxT6vnOfy657R4Y7QpDucAAAAAAAAAAAAAAAAAAAMW+sad/HkuoKUX/7oa8mOmSNWh7x5L47eKs6Q2t8Gztsz0xupHvg/aS8vEkZ+n2r3x9/6W+N1StvLl7f2lpxcHiaakt08p5J8xMTqVaJiY3DeaLxTW0zEan7Wn/LLdLyZ18fm5MXae8ODk9Ox5e9e0r3Sdao6pHNtNc3fB9JJlnDyMeWPLP2Qc/Gy4Z1ePu2eTe0AAABr9T1elpizdzSeOkfvP4GnLnx4o3aW7Dx8mWdUhB61xbV1DMLb9jTfh7TXv7iPn518navaF3jdNx4vNfvP/E8vWeF1lLu6ttnFHeVKZiIU2icH1LzEr9ulDuj95/9Hfg4F7979oSuT1OmPy4+8/P7LrTtNpabHltIKK733t+LLGPFTHGqwh5c18tt3nbNNjWAAAAAAAAAAAAAAAAAAAAAAajWNAoaqn28cTx0qR3ObNxceX1jv8unBy8uGfLP2Qes8M19LzJLtKf80d0vNEfPw8mLv6wvcfqGLN2ntLTUqjpNSotxktmsp5OWJmJ3DttWLRq0bhWaLxpKj6uqrmj0xUW/xRSwdRmvbJ+Ujk9KifNi/C3sr2nfRU7WalF+BWpkreN1lFvjtjnVo0+rq5haRcriSjFbti960jdpYpS151WEXrfGvPmGkLHjVl8kS8/Ud9sX5WeN0r+Wb8JCvWlcSc7iTnJ7t5JdrTad2lYpStI8NY02ej8O19W6wXJT75yzt5eJ0YOLky+kaj5cvI52LD23ufhfaNw7R0pJ0o81TvqS3z8izg4mPF6R3+UDkczLmnzT2+G4SwdTlcgAAAAAAAAAAAAAAAAAAAAAAAADhrO5gTet8JUtRbnb/sqjW69lvzRxZ+DTJ3r2l38bqOTD2nvCE1PSa2lPF3DC7pr2WRsuDJinzQvYOVizR5J+zqsL2pp8lOzk4vw7n70eceS2Od1l7y4aZa6vD61DUaupS5rybl4R+6vgZyZr5Z3aWMPHx4Y1SHOnabV1KXLZQ5vGX3V8TOLDfLOqwZuRjwxu8/8Aq60Tg+lZYnePtai7vup+7vK/H4FMfe3eUHk9SyZfLXtCmjFR6RWEd8QnPoyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHTcUI3MXGtFSi90zzasWjUwzW01ndZR2t8FJ5npL5fGk9vh4EvP0/wDfH+FfjdVmPLl7/wBuvReCXLE9WfT/AG4/2bMYOnT65Pw98jqv8cX5Wlpaws4qFtFQiu5FSlK0jVYRr5LXndp27z28gAAAAAAAAAAAAAAAAAAAAAAABiahdOzg5xjzKKzJd+DXkvNK+LT3jp47RXb6oXPNFSq4jlKWM9zRmt9xuXma6tMQ7O2j0eVh7HrcGpc9rHxX+BuDUiqxaymsePmY8UExLhVovOGum/uHig1JQrxrrNFqS8UItFo3DExNZ1LR3fEnYdtOlRc6NvJQqST9bnys4jjZZ3PQ3TuYRUXUko82MZwu7IGFX1ZULqnbzh0q06k41MrHqbpgbHtUsdV1226gYs9Rg1U+jyVSdLpKCazz46RA7Y3KjGMrjFNyUekmujxnAHY6sY7yW2e7bxARrRlHmjJOP82VjAHNOoqizTaa8UB9gAAAAAAAAAAAAAAAAADXa7NRoVM98Xjfc08idY5bsEf/AKQ1zjCtXt+dZXYvO+M46GjUWyU38Nu5jFf6utUFWpVOz3oVpSprr0SecLyMeHdLa/adw9eLw3rv+Ual93GK9NVkuVValPmeH9Vh7r3mb+anj+Z/480jw3mnxH/XF5RhCNbE3LMYZjFYinlLK8zGSIitu/8A4Y7TNqxp91IQo1qXYLHPSqKWM9Vy9MmZiIvXX7wxEzOO2/2lm6BKCpJU1hrPMuu+WbePMeCIhr5G/HO0lqVZYubrTZSt7ilUaqUHzSpV2tlKHe5bZOhpbGy5a1xdPWo4zSoSpxnnEaTg8pfqz57BhrdJ5pzsI3eXKVvfJKalnkeVBPK3x4mGStd0/oVpFt9pTuKUcYlzRak8ryMjLu1SgtSVRJTk8pYeWuzTT2BDv0xU61Vf6liUfolv2POnjk5Vz79+QMCxowuHYq5TcHVvezUs/V5XIn5ZzjIHLhGMb6jbz7KKuqPZ+q3CMnjOY46wzuGG24QqShUuaVenGM4SpylUpuTpTck/Zz7LWOqQZVAAAAAAAAAAAAAAAAAAA+ZRUvaWTExscdmlskNQzuRQUdkNQw55Vtjp4DRtwqcV0SWPgNQbk7NdyX9BqGdkYKPsrGdxqIY3txKjGTTlFNrZ4RkKlGNT6yKePHAHLpxby0srZ9APn6PDLfLHL3eEAdCLeXFN4w3hbeACVCMukoppbdEBy6UXjMV022AKjFZxFdd+iA5hTVPpBJLyA+wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//2Q==" alt="MITE Logo">
+            <h1>Mangalore Institute of Technology and Engineering</h1>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Feedback section
+def feedback_page():
+    st.title("Feedback")
+    feedback = st.text_area("We value your feedback:", height=150)
+    if st.button("Submit Feedback"):
+        if feedback.strip():
+            with open("feedback.txt", "a") as f:
+                f.write(feedback + "\n")
+            st.success("Thank you for your feedback!")
+            # Set a flag to indicate feedback has been submitted
+            st.session_state['feedback_submitted'] = True
+        else:
+            st.error("Please enter your feedback before submitting.")
+
+# Login page
+def login_page():
+    st.title("Login to MITE Chatbot")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("Login"):
+            if username in st.session_state['users'] and st.session_state['users'][username] == password:
+                st.session_state['logged_in'] = True
+                st.session_state['username'] = username
+            else:
+                st.error("Invalid username or password!")
+    with col2:
+        if st.button("Guest Mode"):
+            st.session_state['logged_in'] = True
+            st.session_state['username'] = "Guest"
+
+# Profile page
+def profile_page():
+    st.title("User Profile")
+    st.markdown(f"### Welcome, {st.session_state['username']}!")
+    if st.session_state['username'] == "Guest":
+        st.warning("Sign up or log in for a personalized experience.")
+    else:
+        st.markdown("You are logged in with full access.")
+
+    if st.button("Logout"):
+        st.session_state['logged_in'] = False
+        st.session_state['username'] = None
+        st.experimental_rerun()
+
+# Chatbot page
+def chatbot_page():
+    st.title("MITE Chatbot")
+    st.markdown(f"Welcome, **{st.session_state['username']}**! How can I assist you?")
+
+    if 'conversation' not in st.session_state:
+        st.session_state['conversation'] = []
+
+    # Check if feedback has been submitted
+    if 'feedback_submitted' in st.session_state and st.session_state['feedback_submitted']:
+        st.session_state['conversation'] = []  # Clear conversation when feedback is submitted
+        st.session_state['feedback_submitted'] = False  # Reset the flag
+
+    # Process user input for chatbot if feedback has not been submitted
+    user_input = st.text_input("Type your message here...")
+    if user_input and ('feedback_submitted' not in st.session_state or not st.session_state['feedback_submitted']):
+        response = get_response(user_input)
+        st.session_state['conversation'].append((user_input, response))
+
+    # Display conversation in reverse order (latest at the top)
+    for user_message, bot_response in reversed(st.session_state['conversation']):
+        # Display user message with emoji in place of "You"
+        st.markdown(f"<div style='background-color: #e1f5fe; padding: 10px; border-radius: 5px; margin-bottom: 10px;'><strong>You 👤:</strong> {user_message}</div>", unsafe_allow_html=True)
+        
+        # Display bot response with emoji in place of "Bot"
+        st.markdown(f"<div style='background-color: #f1f8e9; padding: 10px; border-radius: 5px; margin-bottom: 10px;'><strong>Bot 🤖:</strong> {bot_response}</div>", unsafe_allow_html=True)
+
+# Help page
+def help_page():
+    st.title("Help & Support")
+    st.markdown("""
+    - **How to use the Chatbot:** Type your questions in the input box and press Enter.
+    - **Admissions Help:** Visit [MITE Admissions](https://mite.ac.in) for details.
+    - **Support Contact:** Email us at support@mite.ac.in.
+    """)
+
+# Main app logic
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
+if 'users' not in st.session_state:
+    st.session_state['users'] = {"admin": "password", "user1": "mypassword"}
+
+# Call set_background_and_logo only once, before the tabs
+if not st.session_state['logged_in']:
+    set_background_and_logo()
+
+if st.session_state['logged_in']:
+    tab1, tab2, tab3, tab4 = st.tabs(["Chatbot", "Profile", "Help", "Feedback"])
+    with tab1:
+        chatbot_page()
+    with tab2:
+        profile_page()
+    with tab3:
+        help_page()
+    with tab4:
+        feedback_page()
+else:
+    login_page()
